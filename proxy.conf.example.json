@@ -1,0 +1,24 @@
+{
+  "/api": {
+    "target": "http://127.0.0.1:8000",
+    "secure": false,
+    "pathRewrite": { "^/api" : "" }
+  },
+
+  "/wsapi": {
+    "target": "ws://127.0.0.1:8000",
+    "ws": true,
+    "secure": false,
+    "pathRewrite": { "^/wsapi" : "" }
+  },
+
+  "/google": {
+    "target": "https://maps.googleapis.com",
+    "secure": true,
+    "changeOrigin": true,
+    "pathRewrite": {
+      "^/google": "/maps/api"
+    }
+  }
+
+}

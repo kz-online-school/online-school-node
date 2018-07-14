@@ -1,0 +1,24 @@
+/*@import "../../../../assets/css/normalize";
+@import "/assets/css/bootstrap";
+@import "/assets/css/owl";
+@import "/assets/css/animate";
+@import "/assets/css/cardio";
+@import "/assets/fonts/font-awesome-4.1.0/css/font-awesome.min";
+@import "/assets/fonts/eleganticons/et-icons";
+@import "/assets/css/normalize";*/
+
+
+.navbar > .container, .navbar > .container-fluid{
+  display: block;
+  flex-wrap: nowrap;
+  align-items: normal;
+  justify-content: normal;
+}
+
+.navbar-nav {
+  flex-direction: row;
+}
+
+.row {
+  display: block;
+}

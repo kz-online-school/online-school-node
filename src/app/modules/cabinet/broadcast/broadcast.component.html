@@ -1,0 +1,14 @@
+<h1>Realtime communication with WebRTC</h1>
+
+<video #localVideo id="localVideo" autoplay playsinline></video>
+<video #remoteVideo id="remoteVideo" autoplay playsinline></video>
+
+
+<div>
+  <button id="startButton" (click)="startAction()">Start</button>
+  <button id="callButton" (click)="callAction()">Call</button>
+  <button id="hangupButton" (click)="hangupAction()">Hang Up</button>
+</div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script src="https://webrtc.github.io/adapter/adapter-latest.js"></script>
