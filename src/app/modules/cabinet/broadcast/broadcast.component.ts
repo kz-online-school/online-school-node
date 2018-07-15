@@ -1,4 +1,5 @@
 import { Component, OnInit, AfterViewInit, ViewChild, ElementRef } from '@angular/core';
+import * as io from 'socket.io-client';
 
 @Component({
   selector: 'app-broadcast',
@@ -10,18 +11,89 @@ export class BroadcastComponent implements OnInit, AfterViewInit {
   @ViewChild('localVideo') localVideo: ElementRef;
   @ViewChild('remoteVideo') remoteVideo: ElementRef;
 
-  _navigator = <any> navigator;
-  startTime = null;
-
-  localPeerConnection;
-  remotePeerConnection;
-
+  isChannelReady = false;
+  isInitiator = false;
+  isStarted = false;
   localStream;
+  pc;
   remoteStream;
+  turnReady;
+
+  pcConfig = {
+    'iceServers': [{
+      'urls': 'stun:stun.l.google.com:19302'
+    }]
+  };
+
+// Set up audio and video regardless of what devices are present.
+  sdpConstraints = {
+    offerToReceiveAudio: true,
+    offerToReceiveVideo: true
+  };
+
+  /////////////////////////////////////////////
+
+  room = 'foo';
+// Could prompt for room name:
+// room = prompt('Enter room name:');
+
+  socket = io.connect();
 
   constructor() { }
 
   ngOnInit() {
+    if (this.room !== '') {
+      this.socket.emit('create or join', this.room);
+      console.log('Attempted to create or  join room', this.room);
+    }
+
+    this.socket.on('created', (room) => {
+      console.log('Created room ' + room);
+      this.isInitiator = true;
+    });
+
+    this.socket.on('full', (room) => {
+      console.log('Room ' + room + ' is full');
+    });
+
+    this.socket.on('join', (room) =>{
+      console.log('Another peer made a request to join room ' + room);
+      console.log('This peer is the initiator of room ' + room + '!');
+      this.isChannelReady = true;
+    });
+
+    this.socket.on('joined', (room) => {
+      console.log('joined: ' + room);
+      this.isChannelReady = true;
+    });
+
+    this.socket.on('log', (array) => {
+      console.log.apply(console, array);
+    });
+
+    // This client receives a message
+    this.socket.on('message', (message) => {
+      console.log('Client received message:', message);
+      if (message === 'got user media') {
+        this.maybeStart();
+      } else if (message.type === 'offer') {
+        if (!this.isInitiator && !this.isStarted) {
+          this.maybeStart();
+        }
+        this.pc.setRemoteDescription(new RTCSessionDescription(message));
+        this.doAnswer();
+      } else if (message.type === 'answer' && this.isStarted) {
+        this.pc.setRemoteDescription(new RTCSessionDescription(message));
+      } else if (message.type === 'candidate' && this.isStarted) {
+        var candidate = new RTCIceCandidate({
+          sdpMLineIndex: message.label,
+          candidate: message.candidate
+        });
+        this.pc.addIceCandidate(candidate);
+      } else if (message === 'bye' && this.isStarted) {
+        this.handleRemoteHangup();
+      }
+    });
   }
 
   ngAfterViewInit() {
@@ -29,170 +101,172 @@ export class BroadcastComponent implements OnInit, AfterViewInit {
     // this._navigator = <any>navigator;
     // this._navigator.getUserMedia = ( this._navigator.getUserMedia || this._navigator.webkitGetUserMedia
     //   || this._navigator.mozGetUserMedia || this._navigator.msGetUserMedia );
-  }
 
-  startAction() {
-    const mediaStreamConstraints = {
-      video: true,
-    };
-    navigator.mediaDevices.getUserMedia(mediaStreamConstraints)
-      .then((stream) => {
-        this.gotLocalMediaStream(stream);
-      }).catch(this.handleLocalMediaStreamError);
-  }
-
-  callAction() {
-    const offerOptions = {
-      offerToReceiveVideo: 1,
-    };
-    this.startTime = window.performance.now();
-
-    // Get local media stream tracks.
-    const videoTracks = this.localStream.getVideoTracks();
-    const audioTracks = this.localStream.getAudioTracks();
-    if (videoTracks.length > 0) {
-      console.log(`Using video device: ${videoTracks[0].label}.`);
-    }
-    if (audioTracks.length > 0) {
-      console.log(`Using audio device: ${audioTracks[0].label}.`);
-    }
-
-    const servers = null;  // Allows for RTC server configuration.
-
-    // Create peer connections and add behavior.
-    this.localPeerConnection = new RTCPeerConnection(servers);
-    console.log('Created local peer connection object localPeerConnection.');
-
-    this.localPeerConnection.addEventListener('icecandidate', (e) => {
-      this.handleConnection(e);
-    });
-    this.localPeerConnection.addEventListener(
-      'iceconnectionstatechange', (e) => {
-        this.handleConnectionChange(e);
-      });
-
-    this.remotePeerConnection = new RTCPeerConnection(servers);
-    console.log('Created remote peer connection object remotePeerConnection.');
-
-    this.remotePeerConnection.addEventListener('icecandidate', (e) => {
-      this.handleConnection(e);
-    });
-    this.remotePeerConnection.addEventListener(
-      'iceconnectionstatechange', (e) => {
-        this.handleConnectionChange(e);
-      });
-    this.remotePeerConnection.addEventListener('addstream', (e) => {
-      this.gotRemoteMediaStream(e);
-    });
-
-    // Add local stream to connection and create offer to connect.
-    this.localPeerConnection.addStream(this.localStream);
-    console.log('Added local stream to localPeerConnection.');
-
-    console.log('localPeerConnection createOffer start.');
-    this.localPeerConnection.createOffer(offerOptions)
+    navigator.mediaDevices.getUserMedia({
+      audio: false,
+      video: true
+    })
       .then((v) => {
-        this.createdOffer(v);
-      }).catch(console.log('localPeerConnection.createOffer error'));
-  }
-
-  hangupAction() {
-    this.localPeerConnection.close();
-    this.remotePeerConnection.close();
-    this.localPeerConnection = null;
-    this.remotePeerConnection = null;
-    this.trace('Ending call.');
-  }
-
-  // Handles success by adding the MediaStream to the video element.
-  gotLocalMediaStream(mediaStream) {
-    console.log(mediaStream);
-    this.localStream = mediaStream;
-    this.localVideo.nativeElement.srcObject = mediaStream;
-  }
-
-  // Handles error by logging a message to the console with the error message.
-  handleLocalMediaStreamError(error) {
-    console.log('navigator.getUserMedia error: ', error);
-  }
-
-  gotRemoteMediaStream(event) {
-    const mediaStream = event.stream;
-    console.log(mediaStream);
-    this.remoteStream = mediaStream;
-    this.remoteVideo.nativeElement.srcObject = mediaStream;
-  }
-
-  handleConnection(event) {
-    const peerConnection = event.target;
-    const iceCandidate = event.candidate;
-
-    if (iceCandidate) {
-      const newIceCandidate = new RTCIceCandidate(iceCandidate);
-      const otherPeer = this.getOtherPeer(peerConnection);
-
-      otherPeer.addIceCandidate(newIceCandidate)
-        .then(() => {
-          console.log('handleConnectionSuccess');
-        }).catch((error) => {
-          console.log('handleConnectionFailure');
-      });
-    }
-  }
-
-  createdOffer(description) {
-    this.localPeerConnection.setLocalDescription(description)
-      .then(() => {
-        console.log('localPeerConnection.setLocalDescription success');
-      }).catch(console.log('localPeerConnection.setLocalDescription error'));
-
-    this.remotePeerConnection.setRemoteDescription(description)
-      .then(() => {
-        console.log('remotePeerConnection.setRemoteDescription success');
-      }).catch(console.log('remotePeerConnection.setRemoteDescription error'));
-
-    this.remotePeerConnection.createAnswer()
-      .then((v) => {
-        this.createdAnswer(v);
+        this.gotStream(v);
       })
-      .catch(console.log('remotePeerConnection.createAnswer error'));
+      .catch(function(e) {
+        alert('getUserMedia() error: ' + e.name);
+      });
+
+    var constraints = {
+      video: true
+    };
+
+    console.log('Getting user media with constraints', constraints);
+
+    if (location.hostname !== 'localhost') {
+      this.requestTurn(
+        'https://computeengineondemand.appspot.com/turn?username=41784574&key=4080218913'
+      );
+    }
+
   }
 
-  createdAnswer(description) {
-    this.remotePeerConnection.setLocalDescription(description)
-      .then(() => {
-        console.log('remotePeerConnection.setLocalDescription success');
-      }).catch(console.log('remotePeerConnection.setLocalDescription error'));
-
-    this.localPeerConnection.setRemoteDescription(description)
-      .then(() => {
-        console.log('localPeerConnection.setRemoteDescription success');
-      }).catch(console.log('localPeerConnection.setRemoteDescription error'));
+  sendMessage(message) {
+    console.log('Client sending message: ', message);
+    this.socket.emit('message', message);
   }
 
-  handleConnectionChange(event) {
-    const peerConnection = event.target;
-    console.log('ICE state change event: ', event);
-    console.log(` ICE state: ` +
-      `${peerConnection.iceConnectionState}.`);
-  }
-  getOtherPeer(peerConnection) {
-    return (peerConnection === this.localPeerConnection) ?
-      this.remotePeerConnection : this.localPeerConnection;
-  }
-
-  // Gets the name of a certain peer connection.
-  getPeerName(peerConnection) {
-    return (peerConnection === this.localPeerConnection) ?
-      'localPeerConnection' : 'remotePeerConnection';
+  gotStream(stream) {
+    console.log('Adding local stream.');
+    this.localStream = stream;
+    this.localVideo.nativeElement.srcObject = stream;
+    this.sendMessage('got user media');
+    if (this.isInitiator) {
+      this.maybeStart();
+    }
   }
 
-  // Logs an action (text) and the time when it happened on the console.
-  trace(text) {
-    text = text.trim();
-    const now = (window.performance.now() / 1000).toFixed(3);
+  maybeStart() {
+    console.log('>>>>>>> maybeStart() ', this.isStarted, this.localStream, this.isChannelReady);
+    if (!this.isStarted && typeof this.localStream !== 'undefined' && this.isChannelReady) {
+      console.log('>>>>>> creating peer connection');
+      this.createPeerConnection();
+      this.pc.addStream(this.localStream);
+      this.isStarted = true;
+      console.log('isInitiator', this.isInitiator);
+      if (this.isInitiator) {
+        this.doCall();
+      }
+    }
+  }
 
-    console.log(now, text);
+  createPeerConnection() {
+    try {
+      this.pc = new RTCPeerConnection(null);
+      this.pc.onicecandidate = this.handleIceCandidate.bind(this);
+      this.pc.onaddstream = this.handleRemoteStreamAdded.bind(this);
+      this.pc.onremovestream = this.handleRemoteStreamRemoved.bind(this);
+      console.log('Created RTCPeerConnnection');
+    } catch (e) {
+      console.log('Failed to create PeerConnection, exception: ' + e.message);
+      alert('Cannot create RTCPeerConnection object.');
+      return;
+    }
+  }
+
+  handleIceCandidate(event) {
+    console.log('icecandidate event: ', event);
+    if (event.candidate) {
+      this.sendMessage({
+        type: 'candidate',
+        label: event.candidate.sdpMLineIndex,
+        id: event.candidate.sdpMid,
+        candidate: event.candidate.candidate
+      });
+    } else {
+      console.log('End of candidates.');
+    }
+  }
+
+  handleCreateOfferError(event) {
+    console.log('createOffer() error: ', event);
+  }
+
+  doCall() {
+    console.log('Sending offer to peer');
+    this.pc.createOffer((sd) => this.setLocalAndSendMessage(sd), (e) => this.handleCreateOfferError(e));
+  }
+
+  doAnswer() {
+    console.log('Sending answer to peer.');
+    this.pc.createAnswer().then(
+      (sd) => this.setLocalAndSendMessage(sd),
+      (er) => this.onCreateSessionDescriptionError(er)
+    );
+  }
+
+  setLocalAndSendMessage(sessionDescription) {
+    this.pc.setLocalDescription(sessionDescription);
+    console.log('setLocalAndSendMessage sending message', sessionDescription);
+    this.sendMessage(sessionDescription);
+  }
+
+  onCreateSessionDescriptionError(error) {
+    console.log('Failed to create session description: ' + error.toString());
+  }
+
+  requestTurn(turnURL) {
+    var turnExists = false;
+    for (var i in this.pcConfig.iceServers) {
+      if (this.pcConfig.iceServers[i].urls.substr(0, 5) === 'turn:') {
+        turnExists = true;
+        this.turnReady = true;
+        break;
+      }
+    }
+    if (!turnExists) {
+      console.log('Getting TURN server from ', turnURL);
+      // No TURN server. Get one from computeengineondemand.appspot.com:
+      var xhr = new XMLHttpRequest();
+      var pcConfig = this.pcConfig;
+      xhr.onreadystatechange = function() {
+        if (xhr.readyState === 4 && xhr.status === 200) {
+          var turnServer = JSON.parse(xhr.responseText);
+          console.log('Got TURN server: ', turnServer);
+          pcConfig.iceServers.push({
+            'urls': 'turn:' + turnServer.username + '@' + turnServer.turn
+          });
+          // turnReady = true;
+        }
+      };
+      this.turnReady = true;
+      xhr.open('GET', turnURL, true);
+      xhr.send();
+    }
+  }
+
+  handleRemoteStreamAdded(event) {
+    console.log('Remote stream added.');
+    this.remoteStream = event.stream;
+    this.remoteVideo.nativeElement.srcObject = this.remoteStream;
+  }
+
+  handleRemoteStreamRemoved(event) {
+    console.log('Remote stream removed. Event: ', event);
+  }
+
+  hangup() {
+    console.log('Hanging up.');
+    this.stop();
+    this.sendMessage('bye');
+  }
+
+  handleRemoteHangup() {
+    console.log('Session terminated.');
+    stop();
+    this.isInitiator = false;
+  }
+
+  stop() {
+    this.isStarted = false;
+    this.pc.close();
+    this.pc = null;
   }
 
 }
