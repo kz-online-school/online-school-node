@@ -6,6 +6,9 @@ import { CabinetComponent } from './cabinet.component';
 import { LandingNavbarComponent } from './landing-navbar/landing-navbar.component';
 import { WebrtcComponent } from './webrtc/webrtc.component';
 import { BroadcastComponent } from './broadcast/broadcast.component';
+import { Broadcast2Component } from './broadcast2/broadcast2.component';
+import { SocketIoService } from "../../services/socket.io";
+import { LiveStreamComponent } from './live-stream/live-stream.component';
 
 @NgModule({
   imports: [
@@ -16,7 +19,11 @@ import { BroadcastComponent } from './broadcast/broadcast.component';
     CabinetComponent,
     LandingNavbarComponent,
     WebrtcComponent,
-    BroadcastComponent
+    BroadcastComponent,
+    Broadcast2Component,
+    LiveStreamComponent
+  ],providers   : [
+    SocketIoService
   ]
 })
 export class CabinetModule { }
