@@ -1,20 +1,20 @@
 import { async, ComponentFixture, TestBed } from '@angular/core/testing';
 
-import { LiveStreamComponent } from './live-stream.component';
+import { HostLiveStreamComponent } from './host-live-stream.component';
 
-describe('LiveStreamComponent', () => {
-  let component: LiveStreamComponent;
-  let fixture: ComponentFixture<LiveStreamComponent>;
+describe('HostLiveStreamComponent', () => {
+  let component: HostLiveStreamComponent;
+  let fixture: ComponentFixture<HostLiveStreamComponent>;
 
   beforeEach(async(() => {
     TestBed.configureTestingModule({
-      declarations: [ LiveStreamComponent ]
+      declarations: [ HostLiveStreamComponent ]
     })
     .compileComponents();
   }));
 
   beforeEach(() => {
-    fixture = TestBed.createComponent(LiveStreamComponent);
+    fixture = TestBed.createComponent(HostLiveStreamComponent);
     component = fixture.componentInstance;
     fixture.detectChanges();
   });

@@ -8,7 +8,9 @@ import { WebrtcComponent } from './webrtc/webrtc.component';
 import { BroadcastComponent } from './broadcast/broadcast.component';
 import { Broadcast2Component } from './broadcast2/broadcast2.component';
 import { SocketIoService } from "../../services/socket.io";
-import { LiveStreamComponent } from './live-stream/live-stream.component';
+import { HostLiveStreamComponent } from './live-stream/host/host-live-stream.component';
+import { ClientLiveStreamComponent } from './live-stream/client/client-live-stream.component';
+import { LiveStreamSocketService } from "../../services/live-stream-socket.service";
 
 @NgModule({
   imports: [
@@ -21,9 +23,11 @@ import { LiveStreamComponent } from './live-stream/live-stream.component';
     WebrtcComponent,
     BroadcastComponent,
     Broadcast2Component,
-    LiveStreamComponent
+    HostLiveStreamComponent,
+    ClientLiveStreamComponent
   ],providers   : [
-    SocketIoService
+    SocketIoService,
+    LiveStreamSocketService
   ]
 })
 export class CabinetModule { }
